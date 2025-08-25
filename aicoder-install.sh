@@ -78,6 +78,7 @@ FG="\033[36m"     # 青色（正文）
 ACCENT="\033[35m" # 品牌强调色（紫）
 GREEN="\033[32m"  # 成功
 YELLOW="\033[33m" # 提示
+RED="\033[31m"    # 错误
 GRAY="\033[90m"   # 次要信息
 
 # 终端宽度
@@ -126,12 +127,22 @@ print_tips() {
   printf "%b\n\n" "${FG}4.${RESET} 按 Ctrl+C 可随时退出。"
 }
 
+# 检查是否为 Git 仓库
+check_git_repository() {
+  if [ ! -d ".git" ]; then
+    printf "%b\n" "${RED}错误：当前目录不是 Git 仓库${RESET}"
+    printf "%b\n" "${GRAY}请确保在 Git 仓库根目录中运行此脚本${RESET}"
+    exit 1
+  fi
+  printf "%b\n" "${GREEN}✓ 检测到 Git 仓库${RESET}"
+}
+
 download_remote_repo() {
   printf "%b\n" "${YELLOW}[*] 开始下载远程仓库 → ${REPO_URL}${RESET}"
 
   # 检查 git 是否已安装
   if ! command -v git &>/dev/null; then
-    printf "%b\n" "${YELLOW}错误：未找到 git 命令，请先安装 git${RESET}"
+    printf "%b\n" "${RED}错误：未找到 git 命令，请先安装 git${RESET}"
     exit 1
   fi
 
@@ -161,7 +172,7 @@ download_remote_repo() {
   if git clone "$REPO_URL" "$INSTALL_PATH/$REPO_NAME" 2>/dev/null; then
     printf "%b\n" "${GREEN}✓ 仓库下载成功${RESET}"
   else
-    printf "%b\n" "${YELLOW}错误：仓库下载失败${RESET}"
+    printf "%b\n" "${RED}错误：仓库下载失败${RESET}"
     printf "%b\n" "${GRAY}请检查网络连接和仓库地址是否正确${RESET}"
     exit 1
   fi
@@ -172,25 +183,71 @@ download_remote_repo() {
 
 config_aicoder() {
   printf "%b\n" "${YELLOW}[*] 配置 Git hooks, 项目根目录: ${AICODER_ROOT_DIR}${RESET}"
-  # 复制 aicoder 目录到 .git/hooks
-  cp -r "$AICODER_ROOT_DIR/aicoder" "$CURRENT_DIR/.git/aicoder"
-  # 复制 .git/hooks/pre-commit 文件到 .git/aicoder/pre-commit
-  cp "$AICODER_ROOT_DIR/aicoder/post-commit" "$CURRENT_DIR/.git/hooks/post-commit"
+
+  # 检查下载的源码目录是否存在
+  if [ ! -d "$AICODER_ROOT_DIR" ]; then
+    printf "%b\n" "${RED}错误：源码目录不存在: ${AICODER_ROOT_DIR}${RESET}"
+    exit 1
+  fi
+
+  # 检查 aicoder 目录是否存在
+  if [ ! -d "$AICODER_ROOT_DIR/aicoder" ]; then
+    printf "%b\n" "${RED}错误：aicoder 目录不存在: ${AICODER_ROOT_DIR}/aicoder${RESET}"
+    exit 1
+  fi
+
+  # 检查 post-commit 文件是否存在
+  if [ ! -f "$AICODER_ROOT_DIR/aicoder/post-commit" ]; then
+    printf "%b\n" "${RED}错误：post-commit 文件不存在: ${AICODER_ROOT_DIR}/aicoder/post-commit${RESET}"
+    exit 1
+  fi
+
+  # 确保 .git/hooks 目录存在
+  if [ ! -d ".git/hooks" ]; then
+    printf "%b\n" "${FG}创建 .git/hooks 目录${RESET}"
+    mkdir -p ".git/hooks"
+  fi
+
+  # 复制 aicoder 目录到 .git/aicoder
+  printf "%b\n" "${FG}复制 aicoder 目录到 .git/aicoder${RESET}"
+  if cp -r "$AICODER_ROOT_DIR/aicoder" ".git/aicoder" 2>/dev/null; then
+    printf "%b\n" "${GREEN}✓ aicoder 目录复制成功${RESET}"
+  else
+    printf "%b\n" "${RED}错误：复制 aicoder 目录失败${RESET}"
+    exit 1
+  fi
+
+  # 复制 post-commit 文件到 .git/hooks/post-commit
+  printf "%b\n" "${FG}复制 post-commit 文件到 .git/hooks${RESET}"
+  if cp "$AICODER_ROOT_DIR/aicoder/post-commit" ".git/hooks/post-commit" 2>/dev/null; then
+    printf "%b\n" "${GREEN}✓ post-commit 文件复制成功${RESET}"
+  else
+    printf "%b\n" "${RED}错误：复制 post-commit 文件失败${RESET}"
+    exit 1
+  fi
+
+  # 确保 post-commit 文件有执行权限
+  chmod +x ".git/hooks/post-commit"
+  printf "%b\n" "${GREEN}✓ 设置 post-commit 执行权限${RESET}"
+
   # 配置完成
   printf "%b\n" "${GREEN}✓ Git hooks 配置完成${RESET}"
 }
 
 print_steps() {
   printf "%b\n" "${BOLD}安装步骤：${RESET}"
-  printf "%b\n" "[1/3] 下载远程仓库 ..."
+  printf "%b\n" "[1/4] 检查 Git 仓库 ..."
+  check_git_repository
+  printf "%b\n" "[2/4] 下载远程仓库 ..."
   download_remote_repo
-  printf "%b\n" "[2/3] 配置 AICoder ..."
+  printf "%b\n" "[3/4] 配置 AICoder ..."
   config_aicoder
-  printf "%b\n\n" "[3/3] 安装完成 ... ${GREEN}OK${RESET}"
+  printf "%b\n\n" "[4/4] 安装完成 ... ${GREEN}OK${RESET}"
 }
 
 print_done() {
   printf "%b\n" "${GREEN}${BOLD}安装完成，欢迎使用${RESET}"
+  printf "%b\n" "${FG}现在每次提交代码后都会自动进行 AI 代码审查${RESET}"
 }
 
 # 主流程
